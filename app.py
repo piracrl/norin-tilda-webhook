@@ -23,7 +23,7 @@ def tilda_order():
 
     # редирект в бота
     order_id = f"order_{phone[-4:]}"
-    bot_link = f"https://t.me/your_bot_username?start={order_id}"
+    bot_link = f"https://t.me/nor1nstore_bot?start={order_id}"
 
     return jsonify({"result": "ok", "redirect": bot_link})
 
