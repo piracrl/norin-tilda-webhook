@@ -4,8 +4,8 @@ from flask import Flask, request
 from datetime import datetime
 import pytz
 
-TOKEN = os.getenv("8209697873:AAHe9gzolpUdAnXtIgerB05EJZKJ5Y38Dqk")
-CHAT_ID = os.getenv("747738200")
+TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
