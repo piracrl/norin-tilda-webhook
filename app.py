@@ -11,8 +11,8 @@ bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
+@app.route('/tilda_order', methods=['POST'])
+def tilda_order():
     try:
         data = request.form.to_dict()  # получаем данные из формы Тильды
         print("FORM DATA:", data)  # для отладки в логах
