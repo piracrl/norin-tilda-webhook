@@ -55,7 +55,7 @@ def tilda_order():
         tg_link = f"@{tg_username}" if tg_username else "—"
 
         # Сохраняем заказ по telegram username
-        orders[tg_link] = {
+        ORDERS[tg_link] = {
             "id": order_id,
             "products": products,
             "amount": amount,
