@@ -18,7 +18,7 @@ def tilda_order():
         print("FORM DATA:", data)  # для отладки в логах
 
         # Достаём поля
-        payment_data = json.loads(form_data.get("payment", "{}"))
+        payment_data = json.loads(data.get("payment", "{}"))
 
         order_id = payment_data.get("orderid", "—")
         products = payment_data.get("products", [])
