@@ -8,13 +8,23 @@ from telebot import types
 
 TOKEN = os.getenv("BOT_TOKEN")  # сохрани токен как переменную окружения
 CHAT_ID = os.getenv("CHAT_ID")  # и chat_id тоже
-bot = telebot.TeleBot(TOKEN)
+WEBHOOK_URL = f"https://norin-tilda-webhook.onrender.com/{TOKEN}"
 
+bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 # временное хранилище заказов (потом можно заменить на БД)
-orders = {}
+ORDERS = {}
 
+# --- Вебхук для Telegram ---
+@app.route(f"/{TOKEN}", methods=["POST"])
+def telegram_webhook():
+    json_str = request.get_data(as_text=True)
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "OK", 200
+
+# --- Вебхук для Тильды ---
 @app.route('/tilda_order', methods=['POST'])
 def tilda_order():
     try:
@@ -45,7 +55,7 @@ def tilda_order():
         tg_link = f"@{tg_username}" if tg_username else "—"
 
         # Сохраняем заказ по telegram username
-        orders[tg_username] = {
+        orders[tg_link] = {
             "id": order_id,
             "products": products,
             "amount": amount,
@@ -71,6 +81,7 @@ def tilda_order():
             f"Telegram: {tg_link}"
         )
 
+        #Отправка сообщения продавцу
         bot.send_message(CHAT_ID, message)
         return "ok"
     except Exception as e:
@@ -80,70 +91,63 @@ def tilda_order():
 # ОБРАБОТКА КОМАНД КЛИЕНТА
 @bot.message_handler(commands=["start"])
 def start(message):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("📋 Мой заказ")
+    kb.add("💳 Реквизиты для оплаты", "📞 Связаться с менеджером")
+
+    bot.send_message(
+        message.chat.id,
+        "Привет 👋\nЯ бот магазина Norin Store.\n\n"
+        "Здесь ты можешь получить информацию о заказе, оплате и связаться с менеджером.",
+        reply_markup=kb
+    )
+
+    # --- Проверяем, есть ли заказ у клиента ---
     username = message.from_user.username
-    if username in orders:
-        order = orders[username]
-
-        #Кнопки
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        btn1 = types.KeyboardButton("📑 Реквизиты для оплаты")
-        btn2 = types.KeyboardButton("💬 Связаться с менеджером")
-        btn3 = types.KeyboardButton("✅ Я оплатил")
-        markup.add(btn1, btn2, btn3)
-
-        bot.send_message(
-            message.chat.id,
-            f"""Привет! Мы нашли твой заказ 🎉
-
-📦 Номер заказа: {order['id']}
-👕 Товары: {chr(10).join(order['products'])}
-💳 Сумма: {order['amount']} руб
-
-Выбери действие ниже:""",
-            reply_markup=markup
-            )
-    else:
-        bot.send_message(message.chat.id, "Привет! Пока заказов за тобой не числится 🙂")
+    if username in ORDERS:
+        order = ORDERS[username]
+        order_msg = (
+            f"📦 Мы нашли твой заказ!\n\n"
+            f"Номер заказа: {order['order_id']}\n"
+            f"👕 Товары:\n{order['products']}\n\n"
+            f"💳 Сумма: {order['amount']} руб\n\n"
+            f"🙍 ФИО: {order['name']}\n"
+            f"📞 Телефон: {order['phone']}\n"
+            f"🏠 Адрес: {order['address']}, {order['city']}\n"
+            f"📧 Email: {order['email']}\n\n"
+            "Проверь данные, если что-то не сходится — напиши нам."
+        )
+    bot.send_message(message.chat.id, order_msg)  
 
 # ОБРАБОТКА КНОПОК
-@bot.message_handler(func=lambda m: m.text == "📑 Реквизиты для оплаты")
-def payment_info(message):
+def my_order(message):
     username = message.from_user.username
-    order = orders.get(username)
-    if order:
-        bot.send_message(message.chat.id, f"""Реквизиты для оплаты заказа №{order['id']}:
-
-💳 2202 2020 3030 4040
-Получатель: Иван Иванов
-Сумма: {order['amount']} руб
-
-После оплаты нажми кнопку ✅ Я оплатил""")
+    if username and username in ORDERS:
+        order = ORDERS[username]
+        bot.send_message(
+            message.chat.id,
+            f"Ваш заказ:\n\n"
+            f"📦 Номер: {order['order_id']}\n"
+            f"👕 {order['products']}\n"
+            f"💳 Сумма: {order['amount']} руб"
+        )
     else:
-        bot.send_message(message.chat.id, "У тебя пока нет заказов.")
+        bot.send_message(message.chat.id, "Заказ не найден 😕")
 
-@bot.message_handler(func=lambda m: m.text == "💬 Связаться с менеджером")
+@bot.message_handler(func=lambda msg: msg.text == "💳 Реквизиты для оплаты")
+def payment_info(message):
+    bot.send_message(message.chat.id, "💳 Реквизиты для оплаты:\n\nСбербанк\n1234 5678 9012 3456\nИван Иванов")
+
+@bot.message_handler(func=lambda msg: msg.text == "📞 Связаться с менеджером")
 def contact_manager(message):
-    bot.send_message(message.chat.id, "Напиши @username_менеджера для связи с менеджером.")
+    bot.send_message(message.chat.id, "📞 Напишите менеджеру: @your_manager")
 
 
-@bot.message_handler(func=lambda m: m.text == "✅ Я оплатил")
-def paid(message):
-    bot.send_message(message.chat.id, "Спасибо! Мы проверим оплату и скоро с тобой свяжемся 🙌")
-
-
-# Вебхук для Telegram
-@app.route("/" + TOKEN, methods=["POST"])
-def getMessage():
-    json_str = request.stream.read().decode("UTF-8")
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "!", 200
-
-@app.route("/")
-def webhook():
+# --- Настройка вебхука при запуске ---
+@app.before_first_request
+def set_webhook():
     bot.remove_webhook()
-    bot.set_webhook(url="https://norin-tilda-webhook.onrender.com/" + TOKEN)
-    return "!", 200
+    bot.set_webhook(url=WEBHOOK_URL)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
