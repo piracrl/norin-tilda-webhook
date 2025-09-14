@@ -142,12 +142,7 @@ def payment_info(message):
 def contact_manager(message):
     bot.send_message(message.chat.id, "📞 Напишите менеджеру: @your_manager")
 
-
-# --- Настройка вебхука при запуске ---
-@app.before_first_request
-def set_webhook():
+if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=WEBHOOK_URL)
-
-if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
