@@ -29,6 +29,8 @@ def tilda_order():
     tz = pytz.timezone("Asia/Yekaterinburg")
     now = datetime.now(tz).strftime("%d.%m.%Y %H:%M")
 
+    print(request.json)
+
     # Красивый список товаров
     product_lines = "\n".join([f"— {p}" for p in products]) if products else "—"
 
