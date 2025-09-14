@@ -18,24 +18,14 @@ def tilda_order():
         print("FORM DATA:", data)  # для отладки в логах
 
         # Достаём поля
-        order_id = data.get("tildaorderid", "—")
-        products_raw = data.get("tildaproducts", "[]")
-        try:
-            products_list = json.loads(products_raw)
-        except:
-            products_list = []
+        payment_data = json.loads(form_data.get("payment", "{}"))
 
-        products_text = ""
-        total_sum = 0
-        for item in products_list:
-            title = item.get("title", "Товар")
-            qty = item.get("quantity", 1)
-            price = int(item.get("price", 0))
-            total_sum += price * int(qty)
-            products_text += f"• {title} x{qty} — {price} руб\n"
+        order_id = payment_data.get("orderid", "—")
+        products = payment_data.get("products", [])
+        amount = payment_data.get("amount", "—")
 
-        if not products_text:
-            products_text = "—"
+        # красиво собрать товары
+        products_text = "\n".join(products) if products else "—"
 
         # Время по Екатеринбургу
         tz = pytz.timezone("Asia/Yekaterinburg")
@@ -56,7 +46,7 @@ def tilda_order():
             f"📦 Номер заказа: {order_id}\n"
             f"🕒 Дата и время: {now}\n\n"
             f"👕 Товары:\n{products_text}\n"
-            f"💳 Сумма: {total_sum} руб\n\n"
+            f"💳 Сумма: {amount} руб\n\n"
             f"🙍 ФИО: {fio}\n"
             f"📧 Email: {email}\n"
             f"📞 Телефон: {phone}\n"
