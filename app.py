@@ -6,9 +6,9 @@ from datetime import datetime
 import json
 from telebot import types
 
-TOKEN = os.getenv("BOT_TOKEN")  # сохрани токен как переменную окружения
+TOKEN = os.getenv("TELEGRAM_TOKEN")  # сохрани токен как переменную окружения
 CHAT_ID = os.getenv("CHAT_ID")  # и chat_id тоже
-WEBHOOK_URL = f"https://norin-tilda-webhook.onrender.com/{TOKEN}"
+WEBHOOK_URL = f"https://bot.nor1n-store.ru/bot_webhook"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -17,7 +17,7 @@ app = Flask(__name__)
 ORDERS = {}
 
 # --- Вебхук для Telegram ---
-@app.route(f"/{TOKEN}", methods=["POST"])
+@app.route(f"/bot_webhook", methods=["POST"])
 def telegram_webhook():
     json_str = request.get_data(as_text=True)
     update = telebot.types.Update.de_json(json_str)
