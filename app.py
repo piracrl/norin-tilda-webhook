@@ -152,7 +152,7 @@ def start(message):
             )
             bot.send_message(message.chat.id, order_msg, reply_markup=kb)
 
-@bot.message_handler(func=lambda msg: msg.text.startswith("💳 Реквизиты для оплаты"))
+@bot.message_handler(func=lambda m: isinstance(m.text, str) and "Реквизиты" in m.text and "оплат" in m.text)
 def payment_info(message):
     username = message.from_user.username
     order = None
