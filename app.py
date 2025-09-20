@@ -152,6 +152,19 @@ def start(message):
             )
             bot.send_message(message.chat.id, order_msg, reply_markup=kb)
 
+@bot.message_handler(func=lambda msg: msg.text.startswith("💳 Реквизиты для оплаты"))
+def payment_info(message):
+    username = message.from_user.username
+    order = None
+    if username:
+        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
+
+    amount_text = f"\nСумма к оплате: {order.amount} руб" if order else ""
+    bot.send_message(
+        message.chat.id,
+        "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П." + amount_text
+    )
+
 @bot.message_handler(func=lambda msg: msg.text == "📋 Мой заказ")
 def my_order(message):
     username = message.from_user.username
@@ -179,19 +192,6 @@ def my_order(message):
         )
     else:
         bot.send_message(message.chat.id, "Заказ не найден 😕")
-
-@bot.message_handler(func=lambda msg: msg.text.startswith("💳 Реквизиты для оплаты"))
-def payment_info(message):
-    username = message.from_user.username
-    order = None
-    if username:
-        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
-
-    amount_text = f"\nСумма к оплате: {order.amount} руб" if order else ""
-    bot.send_message(
-        message.chat.id,
-        "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П." + amount_text
-    )
 
 @bot.message_handler(func=lambda msg: msg.text == "✅ Я оплатил")
 def payment_confirmed(message):
