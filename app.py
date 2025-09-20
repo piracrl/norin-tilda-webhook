@@ -1,27 +1,35 @@
 import os
-import sqlite3
-from flask import Flask, request
-import telebot
-import pytz
-from datetime import datetime
 import json
-from telebot import types
-from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
+import pytz
+import telebot
+from telebot import types
+from flask import Flask, request
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+
+# --- Конфиг из окружения ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")  
 CHAT_ID = os.getenv("CHAT_ID")  
 WEBHOOK_URL = f"https://bot.nor1n-store.ru/bot_webhook"
 
-bot = telebot.TeleBot(TOKEN)
-app = Flask(__name__)
+if not TOKEN:
+    raise RuntimeError("TELEGRAM_TOKEN не задан в переменных окружения")
+if not CHAT_ID:
+    raise RuntimeError("CHAT_ID не задан в переменных окружения")
 
-# === Настройки базы данных ===
+# --- Flask / DB ---
+app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///orders.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
 
-# === Модель заказа ===
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+
+# --- Модель заказа ---
 class Order(db.Model):
+    __tablename__ = "orders"
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.String(50))
     products = db.Column(db.Text)
@@ -34,9 +42,7 @@ class Order(db.Model):
     telegram = db.Column(db.String(50))
     paid = db.Column(db.Boolean, default=False)
 
-# === Создание таблиц при запуске ===
-with app.app_context():
-    db.create_all()
+bot = telebot.TeleBot(TOKEN)
 
 # --- Вебхук для Telegram ---
 @app.route(f"/bot_webhook", methods=["POST"])
@@ -50,24 +56,18 @@ def telegram_webhook():
 @app.route('/tilda_order', methods=['POST'])
 def tilda_order():
     try:
-        data = request.form.to_dict()  # получаем данные из формы Тильды
-        print("FORM DATA:", data)  # для отладки в логах
-
-        # Достаём поля
+        data = request.form.to_dict()
         payment_data = json.loads(data.get("payment", "{}"))
 
         order_id = payment_data.get("orderid", "—")
         products = payment_data.get("products", [])
         amount = payment_data.get("amount", "—")
 
-        # красиво собрать товары
         products_text = "\n".join(products) if products else "—"
 
-        # Время по Екатеринбургу
         tz = pytz.timezone("Asia/Yekaterinburg")
         now = datetime.now(tz).strftime("%d.%m.%Y %H:%M")
 
-        # Остальные поля
         fio = data.get("name", "—")
         email = data.get("email", "—")
         phone = data.get("phone", "—")
@@ -76,19 +76,17 @@ def tilda_order():
         tg_username = data.get("telegram", "")
         tg_link = f"@{tg_username}" if tg_username else "—"
 
-        username = tg_username or phone or email  # ключ для сохранения
-
         # сохраняем заказ в БД
         order = Order(
             order_id=order_id,
             products=products_text,
-            amount=amount,
+            amount=str(amount),
             fio=fio,
             email=email,
             phone=phone,
             city=city,
             address=address,
-            telegram=tg_username
+            telegram=tg_username or None
         )
         db.session.add(order)
         db.session.commit()
@@ -112,7 +110,8 @@ def tilda_order():
         bot.send_message(CHAT_ID, message)
         return "ok"
     except Exception as e:
-        print("Ошибка:", e)
+        print("Ошибка tilda_order:", e)
+        db.session.rollback()
         return "error", 500
 
 # ОБРАБОТКА КОМАНД КЛИЕНТА
@@ -131,7 +130,11 @@ def start(message):
 
     username = message.from_user.username
     if username:
-        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
+        order = (
+            Order.query.filter_by(telegram=username)
+            .order_by(Order.id.desc())
+            .first()
+        )
         if order:
             paid_text = "✅ Оплачен" if order.paid else "⌛ Ожидает оплаты"
             kb.add("✅ Я оплатил")
@@ -156,10 +159,14 @@ def my_order(message):
         bot.send_message(message.chat.id, "Извини, не смогли найти заказ. У тебя не заполнен username в Telegram 😕")
         return
     
-    order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
+    order = (
+            Order.query.filter_by(telegram=username)
+            .order_by(Order.id.desc())
+            .first()
+        )
 
     if order:
-        status_text = "✅ Оплачен" if status == "paid" else "⌛ Ожидает оплаты"
+        status_text = "✅ Оплачен" if order.paid else "⌛ Ожидает оплаты"
         bot.send_message(
             message.chat.id,
             f"Твой заказ:\n\n"
