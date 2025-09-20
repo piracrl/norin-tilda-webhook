@@ -6,6 +6,7 @@ import pytz
 from datetime import datetime
 import json
 from telebot import types
+from flask_sqlalchemy import SQLAlchemy
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")  
 CHAT_ID = os.getenv("CHAT_ID")  
@@ -14,53 +15,28 @@ WEBHOOK_URL = f"https://bot.nor1n-store.ru/bot_webhook"
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# --- база SQLite ---
-DB_PATH = "orders.db"
+# === Настройки базы данных ===
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///orders.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS orders (
-            id TEXT PRIMARY KEY,
-            username TEXT,
-            products TEXT,
-            amount TEXT,
-            fio TEXT,
-            email TEXT,
-            phone TEXT,
-            city TEXT,
-            address TEXT,
-            status TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+# === Модель заказа ===
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.String(50))
+    products = db.Column(db.Text)
+    amount = db.Column(db.String(20))
+    fio = db.Column(db.String(200))
+    email = db.Column(db.String(100))
+    phone = db.Column(db.String(50))
+    city = db.Column(db.String(100))
+    address = db.Column(db.String(200))
+    telegram = db.Column(db.String(50))
+    paid = db.Column(db.Boolean, default=False)
 
-def save_order(order_id, username, products, amount, fio, email, phone, city, address):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        INSERT OR REPLACE INTO orders (id, username, products, amount, fio, email, phone, city, address, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (order_id, username, products, amount, fio, email, phone, city, address, "pending"))
-    conn.commit()
-    conn.close()
-
-def get_order_by_username(username):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT * FROM orders WHERE username = ?", (username,))
-    row = c.fetchone()
-    conn.close()
-    return row
-
-def update_order_status(order_id, status):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
-    conn.commit()
-    conn.close()
+# === Создание таблиц при запуске ===
+with app.app_context():
+    db.create_all()
 
 # --- Вебхук для Telegram ---
 @app.route(f"/bot_webhook", methods=["POST"])
@@ -102,8 +78,20 @@ def tilda_order():
 
         username = tg_username or phone or email  # ключ для сохранения
 
-        # Сохраняем заказ по telegram username
-        save_order(order_id, tg_username, products_text, amount, fio, email, phone, city, address)
+        # сохраняем заказ в БД
+        order = Order(
+            order_id=order_id,
+            products=products_text,
+            amount=amount,
+            fio=fio,
+            email=email,
+            phone=phone,
+            city=city,
+            address=address,
+            telegram=tg_username
+        )
+        db.session.add(order)
+        db.session.commit()
 
         # Формируем сообщение
         message = (
@@ -130,82 +118,92 @@ def tilda_order():
 # ОБРАБОТКА КОМАНД КЛИЕНТА
 @bot.message_handler(commands=["start"])
 def start(message):
-    username = message.from_user.username
-    order = get_order_by_username(username) if username else None
-
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("📋 Мой заказ")
+    kb.add("💳 Реквизиты для оплаты", "📞 Связаться с менеджером")
 
-    if order:
-        order_id, username, products, amount, fio, email, phone, city, address, status = order
-        kb.add(f"💳 Реквизиты для оплаты ({amount} ₽)")
-        kb.add("📋 Мой заказ", "📞 Связаться с менеджером")
-        kb.add("✅ Я оплатил")
+    bot.send_message(
+        message.chat.id,
+        "Привет 👋\nЯ бот магазина Nor1n Store.\n\n"
+        "Здесь ты можешь получить информацию о заказе, оплате и связаться с менеджером.",
+        reply_markup=kb
+    )
 
-        order_msg = (
-            f"📦 Мы нашли твой заказ!\n\n"
-            f"Номер заказа: {order_id}\n"
-            f"Товары:\n{products}\n\n"
-            f"Сумма: {amount} руб\n\n"
-            f"ФИО: {fio}\n"
-            f"Телефон: {phone}\n"
-            f"Адрес: {city}, {address}\n"
-            f"Email: {email}\n\n"
-            "Проверь данные, если что-то не сходится — напиши нам."
-        )
-        bot.send_message(message.chat.id, order_msg, reply_markup=kb)
-    else:
-        kb.add("📋 Мой заказ")
-        kb.add("📞 Связаться с менеджером")
-
-        bot.send_message(
-            message.chat.id,
-            "Привет 👋\nЯ бот магазина Nor1n Store.\n\n"
-            "Здесь ты можешь получить информацию о заказе, оплате и связаться с менеджером.",
-            reply_markup=kb
-        )
+    username = message.from_user.username
+    if username:
+        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
+        if order:
+            paid_text = "✅ Оплачен" if order.paid else "⌛ Ожидает оплаты"
+            kb.add("✅ Я оплатил")
+            order_msg = (
+                f"📦 Мы нашли твой заказ!\n\n"
+                f"Номер заказа: {order.order_id}\n"
+                f"Статус: {paid_text}\n\n"
+                f"Товары:\n{order.products}\n\n"
+                f"Сумма: {order.amount} руб\n\n"
+                f"ФИО: {order.fio}\n"
+                f"Телефон: {order.phone}\n"
+                f"Адрес: {order.city}, {order.address}\n"
+                f"Email: {order.email}\n\n"
+                f"Проверь данные, если что-то не сходится — напиши нам."
+            )
+            bot.send_message(message.chat.id, order_msg, reply_markup=kb)
 
 @bot.message_handler(func=lambda msg: msg.text == "📋 Мой заказ")
 def my_order(message):
-    username = message.from_user.username or str(message.chat.id)
-    order = get_order_by_username(username) if username else None
+    username = message.from_user.username
+    if not username:
+        bot.send_message(message.chat.id, "Извини, не смогли найти заказ. У тебя не заполнен username в Telegram 😕")
+        return
+    
+    order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
 
     if order:
-        order_id, username, products, amount, fio, email, phone, city, address, status = order
         status_text = "✅ Оплачен" if status == "paid" else "⌛ Ожидает оплаты"
         bot.send_message(
             message.chat.id,
             f"Твой заказ:\n\n"
-            f"Номер: {order_id}\n"
-            f"{products}\n"
-            f"Сумма: {amount} руб\n"
+            f"Номер: {order.order_id}\n"
+            f"{order.products}\n"
+            f"Сумма: {order.amount} руб\n"
             f"Статус: {status_text}\n\n"
-            f"Адрес доставки: {city}, {address}"
+            f"Адрес доставки: {order.city}, {order.address}\n"
+            f"Телефон: {order.phone}"
         )
     else:
         bot.send_message(message.chat.id, "Заказ не найден 😕")
 
 @bot.message_handler(func=lambda msg: msg.text.startswith("💳 Реквизиты для оплаты"))
 def payment_info(message):
+    username = message.from_user.username
+    order = None
+    if username:
+        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
+
+    amount_text = f"\nСумма к оплате: {order.amount} руб" if order else ""
     bot.send_message(
         message.chat.id,
-        "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П."
+        "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П." + amount_text
     )
 
 @bot.message_handler(func=lambda msg: msg.text == "✅ Я оплатил")
 def payment_confirmed(message):
     username = message.from_user.username
-    order = get_order_by_username(username) if username else None
+    if not username:
+        bot.send_message(message.chat.id, "Извини, не сможем проверить оплату. У тебя не заполнен username в Telegram 😕")
+        return
 
+    order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
     if order:
-        order_id, username, products, amount, fio, email, phone, city, address, status = order
-        update_order_status(order_id, "paid")
-        bot.send_message(message.chat.id, "Спасибо! 🙌 Мы получили информацию об оплате, менеджер скоро проверит её.")
+        order.paid = True
+        db.session.commit()
 
+        bot.send_message(message.chat.id, "Спасибо! Мы отметили, что ты оплатил заказ. Скоро мы всё проверим и свяжемся с тобой.")
         notify = (
             "💸 Клиент сообщил об оплате!\n\n"
-            f"📦 Номер заказа: {order_id}\n"
-            f"👤 Telegram: @{username}\n"
-            f"💳 Сумма: {amount} руб"
+            f"Номер заказа: {order_id}\n"
+            f"Telegram: @{username}\n"
+            f"Сумма: {amount} руб"
         )
         bot.send_message(CHAT_ID, notify)
     else:
@@ -216,7 +214,6 @@ def contact_manager(message):
     bot.send_message(message.chat.id, "📞 Связаться с менеджером можно тут: @nor1nstore_buy")
 
 if __name__ == "__main__":
-    init_db()
     bot.remove_webhook()
     bot.set_webhook(url=WEBHOOK_URL)
     app.run(host="0.0.0.0", port=10000)
