@@ -131,89 +131,83 @@ def start(message):
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and "Мой заказ" in m.text)
 def my_order(message):
-    print(f"my_order triggered: {repr(message.text)}")
     try:
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add("📋 Мой заказ")
-        kb.add("💳 Реквизиты для оплаты")
-        kb.add("📞 Связаться с менеджером")
-        username = message.from_user.username
-        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first() if username else None
-        if order:
-            status_text = "✅ Оплачен" if order.paid else "⌛ Ожидает оплаты"
-            bot.send_message(
-                message.chat.id,
-                f"Твой заказ:\n\n"
-                f"Номер: {order.order_id}\n"
-                f"{order.products}\n"
-                f"Сумма: {order.amount} руб\n"
-                f"Статус: {status_text}\n\n"
-                f"Адрес доставки: {order.city}, {order.address}\n"
-                f"Телефон: {order.phone}",
-                reply_markup=kb,
-            )
-            print("All good")
-        else:
-            bot.send_message(message.chat.id, "Заказ не найден 😕", reply_markup=kb)
-            print("All good")
+        with app.app_context():
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add("📋 Мой заказ")
+            kb.add("💳 Реквизиты для оплаты")
+            kb.add("📞 Связаться с менеджером")
+            username = message.from_user.username
+            order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first() if username else None
+            if order:
+                status_text = "✅ Оплачен" if order.paid else "⌛ Ожидает оплаты"
+                bot.send_message(
+                    message.chat.id,
+                    f"Твой заказ:\n\n"
+                    f"Номер: {order.order_id}\n"
+                    f"{order.products}\n"
+                    f"Сумма: {order.amount} руб\n"
+                    f"Статус: {status_text}\n\n"
+                    f"Адрес доставки: {order.city}, {order.address}\n"
+                    f"Телефон: {order.phone}",
+                    reply_markup=kb,
+                )
+            else:
+                bot.send_message(message.chat.id, "Заказ не найден 😕", reply_markup=kb)
+                print("All good")
     except Exception as e:
         print(f"Ошибка в my_order: {e}")
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and "Реквизиты" in m.text and "оплат" in m.text)
 def payment_info(message):
-    print(f"payment_info triggered: {repr(message.text)}")
     try:
-        username = message.from_user.username
-        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first() if username else None
-        amount_text = f"\nСумма к оплате: {order.amount} руб" if order else ""
+        with app.app_context():
+            username = message.from_user.username
+            order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first() if username else None
+            amount_text = f"\nСумма к оплате: {order.amount} руб" if order else ""
 
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add("✅ Я оплатил")
-        kb.add("📞 Связаться с менеджером")
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add("✅ Я оплатил")
+            kb.add("📞 Связаться с менеджером")
 
-        bot.send_message(
-            message.chat.id,
-            "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П." + amount_text,
-            reply_markup=kb
-        )
-        print("All good")
+            bot.send_message(
+                message.chat.id,
+                "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П." + amount_text,
+                reply_markup=kb
+            )
     except Exception as e:
         print(f"Ошибка в payment_info: {e}")
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and m.text == "✅ Я оплатил")
 def payment_confirmed(message):
-    print(f"payment_confirmed triggered: {repr(message.text)}")
     try:
-        username = message.from_user.username
-        if not username:
-            bot.send_message(message.chat.id, "Извини, не сможем проверить оплату. У тебя не заполнен username в Telegram. Пожалуйста, напиши менеджеру: @nor1nstore_buy")
-            return
+        with app.app_context():
+            username = message.from_user.username
+            if not username:
+                bot.send_message(message.chat.id, "Извини, не сможем проверить оплату. У тебя не заполнен username в Telegram. Пожалуйста, напиши менеджеру: @nor1nstore_buy")
+                return
 
-        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
-        if order:
-            order.paid = True
-            db.session.commit()
+            order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
+            if order:
+                order.paid = True
+                db.session.commit()
 
-            bot.send_message(message.chat.id, "Спасибо! Мы отметили, что ты оплатил заказ. Скоро мы всё проверим и свяжемся с тобой.")
-            notify = (
-                "💸 Клиент сообщил об оплате!\n\n"
-                f"Номер заказа: {order.order_id}\n"
-                f"Telegram: @{username}\n"
-                f"Сумма: {order.amount} руб"
-            )
-            bot.send_message(CHAT_ID, notify)
-        else:
-            bot.send_message(message.chat.id, "❌ У нас нет данных о твоём заказе. Пожалуйста, напиши менеджеру @nor1nstore_buy.")
+                bot.send_message(message.chat.id, "Спасибо! Мы отметили, что ты оплатил заказ. Скоро мы всё проверим и свяжемся с тобой.")
+                notify = (
+                    "💸 Клиент сообщил об оплате!\n\n"
+                    f"Номер заказа: {order.order_id}\n"
+                    f"Telegram: @{username}\n"
+                    f"Сумма: {order.amount} руб"
+                )
+                bot.send_message(CHAT_ID, notify)
+            else:
+                bot.send_message(message.chat.id, "❌ У нас нет данных о твоём заказе. Пожалуйста, напиши менеджеру @nor1nstore_buy.")
     except Exception as e:
         print(f"Ошибка в payment_confirmed: {e}")
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and "Связаться" in m.text and "менеджер" in m.text)
 def contact_manager(message):
     bot.send_message(message.chat.id, "📞 Связаться с менеджером можно тут: @nor1nstore_buy")
-
-@bot.message_handler(func=lambda m: True, content_types=['text'])
-def debug_text_handler(m):
-    print(f"DEBUG REPLY: '{repr(m.text)}' от пользователя {m.from_user.username} ({m.chat.id})")
 
 if __name__ == "__main__":
     bot.remove_webhook()
