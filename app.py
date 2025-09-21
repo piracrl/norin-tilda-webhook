@@ -129,10 +129,6 @@ def start(message):
         reply_markup=kb
     )
 
-@bot.message_handler(func=lambda m: True, content_types=['text'])
-def debug_text_handler(m):
-    print(f"DEBUG REPLY: '{repr(m.text)}' от пользователя {m.from_user.username} ({m.chat.id})")
-
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and "Мой заказ" in m.text)
 def my_order(message):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -199,6 +195,10 @@ def payment_confirmed(message):
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and "Связаться" in m.text and "менеджер" in m.text)
 def contact_manager(message):
     bot.send_message(message.chat.id, "📞 Связаться с менеджером можно тут: @nor1nstore_buy")
+
+@bot.message_handler(func=lambda m: True, content_types=['text'])
+def debug_text_handler(m):
+    print(f"DEBUG REPLY: '{repr(m.text)}' от пользователя {m.from_user.username} ({m.chat.id})")
 
 if __name__ == "__main__":
     bot.remove_webhook()
