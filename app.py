@@ -162,7 +162,7 @@ def payment_info(message):
 
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("✅ Я оплатил")
-    kb.add(""📞 Связаться с менеджером"")
+    kb.add("📞 Связаться с менеджером")
 
     bot.send_message(
         message.chat.id,
