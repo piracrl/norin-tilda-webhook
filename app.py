@@ -151,8 +151,10 @@ def my_order(message):
                 f"Телефон: {order.phone}",
                 reply_markup=kb,
             )
+            print("All good")
         else:
             bot.send_message(message.chat.id, "Заказ не найден 😕", reply_markup=kb)
+            print("All good")
     except Exception as e:
         print(f"Ошибка в my_order: {e}")
 
@@ -172,6 +174,7 @@ def payment_info(message):
             "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П." + amount_text,
             reply_markup=kb
         )
+        print("All good")
     except Exception as e:
         print(f"Ошибка в payment_info: {e}")
 
