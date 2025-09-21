@@ -131,6 +131,7 @@ def start(message):
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and "Мой заказ" in m.text)
 def my_order(message):
+    print(f"my_order triggered: {repr(message.text)}")
     try:
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         kb.add("📋 Мой заказ")
@@ -160,6 +161,7 @@ def my_order(message):
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and "Реквизиты" in m.text and "оплат" in m.text)
 def payment_info(message):
+    print(f"payment_info triggered: {repr(message.text)}")
     try:
         username = message.from_user.username
         order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first() if username else None
@@ -180,6 +182,7 @@ def payment_info(message):
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and m.text == "✅ Я оплатил")
 def payment_confirmed(message):
+    print(f"payment_confirmed triggered: {repr(message.text)}")
     try:
         username = message.from_user.username
         if not username:
