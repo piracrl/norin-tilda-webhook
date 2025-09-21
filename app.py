@@ -119,7 +119,8 @@ def tilda_order():
 def start(message):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("📋 Мой заказ")
-    kb.add("💳 Реквизиты для оплаты", "📞 Связаться с менеджером")
+    kb.add("💳 Реквизиты для оплаты")
+    kb.add("📞 Связаться с менеджером")
 
     bot.send_message(
         message.chat.id,
@@ -128,56 +129,15 @@ def start(message):
         reply_markup=kb
     )
 
-    username = message.from_user.username
-    if username:
-        order = (
-            Order.query.filter_by(telegram=username)
-            .order_by(Order.id.desc())
-            .first()
-        )
-        if order:
-            paid_text = "✅ Оплачен" if order.paid else "⌛ Ожидает оплаты"
-            kb.add("✅ Я оплатил")
-            order_msg = (
-                f"📦 Мы нашли твой заказ!\n\n"
-                f"Номер заказа: {order.order_id}\n"
-                f"Статус: {paid_text}\n\n"
-                f"Товары:\n{order.products}\n\n"
-                f"Сумма: {order.amount} руб\n\n"
-                f"ФИО: {order.fio}\n"
-                f"Телефон: {order.phone}\n"
-                f"Адрес: {order.city}, {order.address}\n"
-                f"Email: {order.email}\n\n"
-                f"Проверь данные, если что-то не сходится — напиши нам."
-            )
-            bot.send_message(message.chat.id, order_msg, reply_markup=kb)
 
-@bot.message_handler(func=lambda m: isinstance(m.text, str) and "Реквизиты" in m.text and "оплат" in m.text)
-def payment_info(message):
-    username = message.from_user.username
-    order = None
-    if username:
-        order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
-
-    amount_text = f"\nСумма к оплате: {order.amount} руб" if order else ""
-    bot.send_message(
-        message.chat.id,
-        "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П." + amount_text
-    )
-
-@bot.message_handler(func=lambda msg: msg.text == "📋 Мой заказ")
+@bot.message_handler(func=lambda m: isinstance(m.text, str) and "Мой заказ" in m.text)
 def my_order(message):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("📋 Мой заказ")
+    kb.add("💳 Реквизиты для оплаты")
+    kb.add("📞 Связаться с менеджером")
     username = message.from_user.username
-    if not username:
-        bot.send_message(message.chat.id, "Извини, не смогли найти заказ. У тебя не заполнен username в Telegram 😕")
-        return
-    
-    order = (
-            Order.query.filter_by(telegram=username)
-            .order_by(Order.id.desc())
-            .first()
-        )
-
+    order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first() if username else None
     if order:
         status_text = "✅ Оплачен" if order.paid else "⌛ Ожидает оплаты"
         bot.send_message(
@@ -188,12 +148,29 @@ def my_order(message):
             f"Сумма: {order.amount} руб\n"
             f"Статус: {status_text}\n\n"
             f"Адрес доставки: {order.city}, {order.address}\n"
-            f"Телефон: {order.phone}"
+            f"Телефон: {order.phone}",
+            reply_markup=kp,
         )
     else:
-        bot.send_message(message.chat.id, "Заказ не найден 😕")
+        bot.send_message(message.chat.id, "Заказ не найден 😕", reply_markup=kb)
 
-@bot.message_handler(func=lambda msg: msg.text == "✅ Я оплатил")
+@bot.message_handler(func=lambda m: isinstance(m.text, str) and "Реквизиты" in m.text and "оплат" in m.text)
+def payment_info(message):
+    username = message.from_user.username
+    order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first() if username else None
+    amount_text = f"\nСумма к оплате: {order.amount} руб" if order else ""
+
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("✅ Я оплатил")
+    kb.add(""📞 Связаться с менеджером"")
+
+    bot.send_message(
+        message.chat.id,
+        "💳 Реквизиты для оплаты:\n\nТ-Банк\n2200 7007 4343 1685\nСавелий П." + amount_text,
+        reply_markup=kb
+    )
+
+@bot.message_handler(func=lambda m: isinstance(m.text, str) and "оплат" in m.text)
 def payment_confirmed(message):
     username = message.from_user.username
     if not username:
@@ -216,7 +193,7 @@ def payment_confirmed(message):
     else:
         bot.send_message(message.chat.id, "❌ У нас нет данных о твоём заказе. Пожалуйста, напиши менеджеру @nor1nstore_buy.")
 
-@bot.message_handler(func=lambda msg: msg.text == "📞 Связаться с менеджером")
+@bot.message_handler(func=lambda m: isinstance(m.text, str) and "Связаться" in m.text and "менеджер" in m.text)
 def contact_manager(message):
     bot.send_message(message.chat.id, "📞 Связаться с менеджером можно тут: @nor1nstore_buy")
 
