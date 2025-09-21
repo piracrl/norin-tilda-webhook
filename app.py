@@ -115,6 +115,10 @@ def tilda_order():
         return "error", 500
 
 # ОБРАБОТКА КОМАНД КЛИЕНТА
+@bot.message_handler(func=lambda m: True, content_types=['text'])
+def debug_text_handler(m):
+    print(f"DEBUG REPLY: '{repr(m.text)}' от пользователя {m.from_user.username} ({m.chat.id})")
+
 @bot.message_handler(commands=["start"])
 def start(message):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
