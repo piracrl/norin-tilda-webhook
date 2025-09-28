@@ -66,6 +66,9 @@ def tilda_order():
 
         products_text = "\n".join(products) if products else "—"
 
+        print(f"Webhook data: {payment_data}")
+        print(f"tranid from webhook: {payment_data.get('tranid')}")
+
         tz = pytz.timezone("Asia/Yekaterinburg")
         now = datetime.now(tz).strftime("%d.%m.%Y %H:%M")
 
