@@ -194,7 +194,8 @@ def payment_confirmed_request(message):
                 bot.send_message(message.chat.id, "Оплату уже подтвердили. Спасибо!")
                 return
 
-            lead_id = order.lead_id or "неизвестен"    
+            lead_id = order.lead_id or "неизвестен"   
+            project_id = "13927899" 
             crm_link = f"https://tilda.ru/projects/leads/?projectid={project_id}&id={project_id}:{lead_id}"
 
             keyboard = types.InlineKeyboardMarkup()
