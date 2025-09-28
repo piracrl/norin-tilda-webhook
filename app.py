@@ -13,11 +13,10 @@ from flask_migrate import Migrate
 TOKEN = os.getenv("TELEGRAM_TOKEN")  
 CHAT_ID = os.getenv("CHAT_ID")  
 WEBHOOK_URL = f"https://bot.nor1n-store.ru/bot_webhook"
+PROJECT_ID = "13927899"
 
-if not TOKEN:
-    raise RuntimeError("TELEGRAM_TOKEN не задан в переменных окружения")
-if not CHAT_ID:
-    raise RuntimeError("CHAT_ID не задан в переменных окружения")
+if not TOKEN or not CHAT_ID or not PROJECT_ID:
+    raise RuntimeError("Отсутствуют переменные окружения TELEGRAM_TOKEN, CHAT_ID или PROJECT_ID")
 
 # --- Flask / DB ---
 app = Flask(__name__)
@@ -32,6 +31,7 @@ class Order(db.Model):
     __tablename__ = "orders"
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.String(50))
+    lead_id = db.Column(db.String(50))
     products = db.Column(db.Text)
     amount = db.Column(db.String(20))
     fio = db.Column(db.String(200))
@@ -60,6 +60,7 @@ def tilda_order():
         payment_data = json.loads(data.get("payment", "{}"))
 
         order_id = payment_data.get("orderid", "—")
+        lead_id = payment_data.get("tranid", "")
         products = payment_data.get("products", [])
         amount = payment_data.get("amount", "—")
 
@@ -76,34 +77,33 @@ def tilda_order():
         tg_username = data.get("telegram", "")
         tg_link = f"@{tg_username}" if tg_username else "—"
 
-        # сохраняем заказ в БД
-        order = Order(
-            order_id=order_id,
-            products=products_text,
-            amount=str(amount),
-            fio=fio,
-            email=email,
-            phone=phone,
-            city=city,
-            address=address,
-            telegram=tg_username or None
-        )
-        db.session.add(order)
-        db.session.commit()
+        with app.app_context():
+            # сохраняем заказ с lead_id и order_id
+            order = Order(
+                order_id=order_id,
+                lead_id=lead_id,
+                products=products_text,
+                amount=str(amount),
+                fio=fio,
+                email=email,
+                phone=phone,
+                city=city,
+                address=address,
+                telegram=tg_username or None
+            )
+            db.session.add(order)
+            db.session.commit()
 
         # Формируем сообщение
         message = (
-            "🛒 Новый заказ с сайта NOR1N STORE\n\n"
-            f"📦 Номер заказа: {order_id}\n"
-            f"🕒 Дата и время: {now}\n\n"
+            "🛒 Новый заказ!\n\n"
+            f"📦 Номер для клиента: {order_id}\n"
+            f"Номер заказа в Тильде: {lead_id}\n"
+            f"🕒 Дата: {now}\n\n"
             f"Товары:\n{products_text}\n\n"
             f"Cумма: {amount} руб\n\n"
-            f"ФИО: {fio}\n"
-            f"Email: {email}\n"
-            f"Телефон: {phone}\n"
-            f"Адрес: {address}\n"
-            f"Город: {city}\n"
-            f"Telegram: {tg_link}"
+            f"Заявка в Тильде:\n"
+            f"https://tilda.ru/projects/leads/?projectid={PROJECT_ID}&id={PROJECT_ID}:{lead_id}"
         )
 
         #Отправка сообщения продавцу
@@ -148,8 +148,7 @@ def my_order(message):
                     f"{order.products}\n"
                     f"Сумма: {order.amount} руб\n"
                     f"Статус: {status_text}\n\n"
-                    f"Адрес доставки: {order.city}, {order.address}\n"
-                    f"Телефон: {order.phone}",
+                    f"Для вопросов: напиши менеджеру @nor1nstore_buy",
                     reply_markup=kb,
                 )
             else:
@@ -192,7 +191,7 @@ def payment_confirmed(message):
                 order.paid = True
                 db.session.commit()
 
-                bot.send_message(message.chat.id, "Спасибо! Мы отметили, что ты оплатил заказ. Скоро мы всё проверим и свяжемся с тобой.")
+                bot.send_message(message.chat.id, "Спасибо! Мы отметили, что ты оплатил заказ. Скоро всё проверим и свяжемся с тобой.")
                 notify = (
                     "💸 Клиент сообщил об оплате!\n\n"
                     f"Номер заказа: {order.order_id}\n"
