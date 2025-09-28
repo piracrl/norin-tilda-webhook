@@ -58,6 +58,8 @@ def tilda_order():
     try:
         data = request.form.to_dict()
         payment_data = json.loads(data.get("payment", "{}"))
+        app.logger.info(f"Webhook Тильды: {data}")
+        app.logger.info(f"payment_data: {payment_data}")
 
         order_id = payment_data.get("orderid", "—")
         lead_id = payment_data.get("tranid", "")
@@ -65,9 +67,6 @@ def tilda_order():
         amount = payment_data.get("amount", "—")
 
         products_text = "\n".join(products) if products else "—"
-
-        print(f"Webhook data: {payment_data}")
-        print(f"tranid from webhook: {payment_data.get('tranid')}")
 
         tz = pytz.timezone("Asia/Yekaterinburg")
         now = datetime.now(tz).strftime("%d.%m.%Y %H:%M")
