@@ -178,7 +178,7 @@ def payment_info(message):
         print(f"Ошибка в payment_info: {e}")
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and m.text == "✅ Я оплатил")
-def payment_confirmed(message):
+def payment_confirmed_request(message):
     try:
         with app.app_context():
             username = message.from_user.username
@@ -187,22 +187,68 @@ def payment_confirmed(message):
                 return
 
             order = Order.query.filter_by(telegram=username).order_by(Order.id.desc()).first()
-            if order:
-                order.paid = True
-                db.session.commit()
+            if not order:
+                bot.send_message(message.chat.id, "Не нашли заказ. Пожалуйста, напиши с менеджеру: @nor1nstore_buy")
+                return
+            if order.paid:
+                bot.send_message(message.chat.id, "Оплату уже подтвердили. Спасибо!")
+                return
 
-                bot.send_message(message.chat.id, "Спасибо! Мы отметили, что ты оплатил заказ. Скоро всё проверим и свяжемся с тобой.")
-                notify = (
-                    "💸 Клиент сообщил об оплате!\n\n"
-                    f"Номер заказа: {order.order_id}\n"
-                    f"Telegram: @{username}\n"
-                    f"Сумма: {order.amount} руб"
-                )
-                bot.send_message(CHAT_ID, notify)
-            else:
-                bot.send_message(message.chat.id, "❌ У нас нет данных о твоём заказе. Пожалуйста, напиши менеджеру @nor1nstore_buy.")
+            lead_id = order.lead_id or "неизвестен"    
+            crm_link = f"https://tilda.ru/projects/leads/?projectid={project_id}&id={project_id}:{lead_id}"
+
+            keyboard = types.InlineKeyboardMarkup()
+            confirm_button = types.InlineKeyboardButton(
+                text="Подтвердить оплату",
+                callback_data=f"confirm_payment:{order.id}"
+            )
+            keyboard.add(confirm_button)
+
+            notify_text = (
+                f"💳 Клиент @{username} сообщил об оплате!\n"
+                f"Номер заказа: {order.order_id}\n"
+                f"Сумма: {order.amount} руб\n"
+                f"Ссылка на CRM: {crm_link}"
+            )
+            bot.send_message(int(CHAT_ID), notify_text, reply_markup=keyboard)
+
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add("📞 Связаться с менеджером")
+            bot.send_message(message.chat.id, "Спасибо! В ближайшее время мы проверим оплату и вернёмся с ответом.", reply_markup=kb)
     except Exception as e:
-        print(f"Ошибка в payment_confirmed: {e}")
+        print(f"Ошибка в payment_confirmed_request: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_payment:"))
+def callback_confirm_payment(call):
+    try:
+        order_id = int(call.data.split(":")[1])
+        with app.app_context():
+            order = Order.query.get(order_id)
+            if not order:
+                bot.answer_callback_query(call.id, "Заказ не найден.")
+                return
+            if order.paid:
+                bot.answer_callback_query(call.id, "Оплата уже была подтверждена.")
+                return
+
+            order.paid = True
+            db.session.commit()
+
+            if order.telegram:
+                bot.send_message(
+                    f"@{order.telegram}",
+                    "Менеджер подтвердил оплату! Скоро мы свяжемся с тобой для уточнения деталей доставки."
+                )
+
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=f"Оплата заказа {order.order_id} подтверждена менеджером."
+            )
+            bot.answer_callback_query(call.id, "Оплата подтверждена")
+    except Exception as e:
+        print(f"Ошибка в callback_confirm_payment: {e}")
+        bot.answer_callback_query(call.id, "Ошибка при подтверждении оплаты.")        
 
 @bot.message_handler(func=lambda m: isinstance(m.text, str) and "Связаться" in m.text and "менеджер" in m.text)
 def contact_manager(message):
